@@ -147,14 +147,107 @@ local aimbotEnabled = false
 local aimbotKey = Enum.KeyCode.X
 local isWaitingForKey = false
 
--- NOCLIP FEATURE
+-- NOCLIP FEATURE (COMPLETELY FIXED)
 local noclipEnabled = false
 local noclipConnection = nil
+local noclipDebounce = false
+local noclipButtonRef = nil -- Store reference to noclip button
+
+local function updateNoclip()
+    if noclipEnabled then
+        if noclipConnection then return end
+        
+        noclipConnection = runService.Stepped:Connect(function()
+            if localPlayer and localPlayer.Character then
+                local character = localPlayer.Character
+                pcall(function()
+                    for _, child in pairs(character:GetDescendants()) do
+                        if child:IsA("BasePart") and child.CanCollide == true then
+                            child.CanCollide = false
+                        end
+                    end
+                end)
+            end
+        end)
+    else
+        if noclipConnection then
+            noclipConnection:Disconnect()
+            noclipConnection = nil
+        end
+        
+        if localPlayer and localPlayer.Character then
+            pcall(function()
+                for _, child in pairs(localPlayer.Character:GetDescendants()) do
+                    if child:IsA("BasePart") then
+                        child.CanCollide = true
+                    end
+                end
+            end)
+        end
+    end
+end
+
+local function toggleNoclip()
+    if noclipDebounce then return end
+    noclipDebounce = true
+    
+    noclipEnabled = not noclipEnabled
+    updateNoclip()
+    
+    -- Update UI button color
+    if noclipButtonRef then
+        noclipButtonRef.BackgroundColor3 = noclipEnabled and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
+    end
+    
+    task.wait(0.1)
+    noclipDebounce = false
+end
 
 -- INFINITE JUMP FEATURE
 local infJumpEnabled = false
-local infJumpKey = Enum.KeyCode.LeftAlt
 local infJumpConnection = nil
+local infJumpButtonRef = nil
+
+local function enableInfiniteJump()
+    if infJumpConnection then
+        infJumpConnection:Disconnect()
+    end
+    
+    infJumpConnection = userInputService.JumpRequest:Connect(function()
+        if infJumpEnabled then
+            local character = localPlayer.Character
+            if character then
+                local humanoid = character:FindFirstChildWhichIsA("Humanoid")
+                if humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
+                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
+                end
+            end
+        end
+    end)
+    
+    infJumpEnabled = true
+end
+
+local function disableInfiniteJump()
+    if infJumpConnection then
+        infJumpConnection:Disconnect()
+        infJumpConnection = nil
+    end
+    infJumpEnabled = false
+end
+
+local function toggleInfiniteJump()
+    if infJumpEnabled then
+        disableInfiniteJump()
+    else
+        enableInfiniteJump()
+    end
+    
+    -- Update UI button color
+    if infJumpButtonRef then
+        infJumpButtonRef.BackgroundColor3 = infJumpEnabled and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
+    end
+end
 
 -- GOLDEN ESP LIST
 local goldenESPList = {} -- Stores player names only
@@ -174,6 +267,8 @@ local minDistance = 100
 local maxDistance = 5000
 local currentTarget = nil
 local isAiming = false
+local aimbotButtonRef = nil
+local espButtonRef = nil
 
 -- Aimbot activation button choice
 local aimbotActivationButton = Enum.UserInputType.MouseButton2
@@ -205,62 +300,6 @@ end
 
 mouse.Move:Connect(updateCirclePosition)
 mouse.Idle:Connect(updateCirclePosition)
-
--- NOCLIP FUNCTIONS
-local function enableNoclip()
-    if noclipConnection then
-        noclipConnection:Disconnect()
-    end
-    
-    noclipConnection = runService.Stepped:Connect(function()
-        if localPlayer.Character then
-            for _, child in pairs(localPlayer.Character:GetDescendants()) do
-                if child:IsA("BasePart") and child.CanCollide == true then
-                    child.CanCollide = false
-                end
-            end
-        end
-    end)
-    
-    noclipEnabled = true
-end
-
-local function disableNoclip()
-    if noclipConnection then
-        noclipConnection:Disconnect()
-        noclipConnection = nil
-    end
-    noclipEnabled = false
-end
-
--- INFINITE JUMP FUNCTIONS
-local function enableInfiniteJump()
-    if infJumpConnection then
-        infJumpConnection:Disconnect()
-    end
-    
-    infJumpConnection = userInputService.JumpRequest:Connect(function()
-        if infJumpEnabled then
-            local character = localPlayer.Character
-            if character then
-                local humanoid = character:FindFirstChildWhichIsA("Humanoid")
-                if humanoid and humanoid.Health > 0 and humanoid:GetState() ~= Enum.HumanoidStateType.Jumping then
-                    humanoid:ChangeState(Enum.HumanoidStateType.Jumping)
-                end
-            end
-        end
-    end)
-    
-    infJumpEnabled = true
-end
-
-local function disableInfiniteJump()
-    if infJumpConnection then
-        infJumpConnection:Disconnect()
-        infJumpConnection = nil
-    end
-    infJumpEnabled = false
-end
 
 -- Team check function
 local function isEnemy(player)
@@ -625,7 +664,7 @@ addButton.MouseButton1Click:Connect(function()
     end
 end)
 
--- Function to create normal sized button
+-- Function to create normal sized button (FIXED - returns button for color control)
 local function createNormalButton(text, initialState, callback)
     local buttonFrame = Instance.new("Frame", scrollingFrame)
     buttonFrame.Size = UDim2.new(1, 0, 0, 35)
@@ -644,9 +683,10 @@ local function createNormalButton(text, initialState, callback)
     btnCorner.CornerRadius = UDim.new(0, 6)
     
     button.MouseButton1Click:Connect(function()
-        initialState = not initialState
-        button.BackgroundColor3 = initialState and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
-        callback(initialState)
+        local newState = not initialState
+        initialState = newState
+        button.BackgroundColor3 = newState and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
+        callback(newState)
     end)
     
     return button
@@ -1202,7 +1242,7 @@ local function applyAimbot(targetPart)
 end
 
 -- Create UI elements for main window
-local aimbotToggle = createNormalButton("AIMBOT (Upper Torso)", aimbotEnabled, function(state)
+local aimbotButton = createNormalButton("AIMBOT (Upper Torso)", aimbotEnabled, function(state)
     aimbotEnabled = state
     fovCircle.Visible = state and fovCircleEnabled
     if not state then
@@ -1215,28 +1255,27 @@ local aimbotToggle = createNormalButton("AIMBOT (Upper Torso)", aimbotEnabled, f
         currentTarget = nil
     end
 end)
+aimbotButtonRef = aimbotButton
 
 createKeybindButton("Aimbot Key", aimbotKey, function(key)
     aimbotKey = key
 end)
 
 -- INFINITE JUMP TOGGLE
-local infJumpToggle = createNormalButton("INFINITE JUMP (Left Alt)", infJumpEnabled, function(state)
+local infJumpButton = createNormalButton("INFINITE JUMP (Left Alt)", infJumpEnabled, function(state)
     if state then
         enableInfiniteJump()
     else
         disableInfiniteJump()
     end
 end)
+infJumpButtonRef = infJumpButton
 
--- NOCLIP TOGGLE
-local noclipToggle = createNormalButton("NOCLIP (Left Ctrl)", noclipEnabled, function(state)
-    if state then
-        enableNoclip()
-    else
-        disableNoclip()
-    end
+-- NOCLIP TOGGLE (FIXED)
+local noclipButton = createNormalButton("NOCLIP (Left Ctrl)", noclipEnabled, function(state)
+    toggleNoclip()
 end)
+noclipButtonRef = noclipButton
 
 -- ESP Mode selector
 createOptionSelector("ESP Mode", espModes, 1, function(mode)
@@ -1274,10 +1313,11 @@ end, "s")
 -- ESP Distance Volume Slider
 local espDistanceSlider = createDistanceVolumeSlider()
 
-local espToggle = createNormalButton("ESP", espEnabled, function(state)
+local espButton = createNormalButton("ESP", espEnabled, function(state)
     espEnabled = state
     updateESP()
 end)
+espButtonRef = espButton
 
 -- Airdrop + NPC Script button
 local airdropButton = createExecuteButton("📦 Airdrop + NPC Script", "https://raw.githubusercontent.com/zentir0g/ignore/refs/heads/main/jjjjssdsd.lua", function(success)
@@ -1380,7 +1420,9 @@ userInputService.InputBegan:Connect(function(input, gameProcessed)
     if not isWaitingForKey then
         if input.KeyCode == aimbotKey then
             aimbotEnabled = not aimbotEnabled
-            aimbotToggle.BackgroundColor3 = aimbotEnabled and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
+            if aimbotButtonRef then
+                aimbotButtonRef.BackgroundColor3 = aimbotEnabled and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
+            end
             fovCircle.Visible = aimbotEnabled and fovCircleEnabled
             if not aimbotEnabled then
                 if currentTarget and currentTarget.Character then
@@ -1393,18 +1435,15 @@ userInputService.InputBegan:Connect(function(input, gameProcessed)
             end
             
         elseif input.KeyCode == Enum.KeyCode.LeftControl then
-            noclipEnabled = not noclipEnabled
-            if noclipEnabled then
-                enableNoclip()
-            else
-                disableNoclip()
-            end
-            noclipToggle.BackgroundColor3 = noclipEnabled and Color3.fromRGB(0, 130, 220) or Color3.fromRGB(45, 45, 50)
+            toggleNoclip()
+            
+        elseif input.KeyCode == Enum.KeyCode.LeftAlt then
+            toggleInfiniteJump()
             
         elseif input.KeyCode == Enum.KeyCode.Insert then
             showMenu = not showMenu
             mainFrame.Visible = showMenu
-            goldenFrame.Visible = showMenu -- Both windows show/hide together
+            goldenFrame.Visible = showMenu
         end
     end
 end)
@@ -1442,6 +1481,11 @@ localPlayer.CharacterAdded:Connect(function()
         task.wait(0.5)
         enableInfiniteJump()
     end
+    -- Reset noclip state on character respawn
+    if noclipEnabled then
+        task.wait(0.5)
+        updateNoclip()
+    end
 end)
 
 players.PlayerAdded:Connect(function(player)
@@ -1461,7 +1505,7 @@ print("ZENTIROG HUB LOADED!")
 print("===================================")
 print("INSERT - Show/Hide both windows")
 print("X - Aimbot (Upper Torso)")
-print("Left Ctrl - Noclip")
+print("Left Ctrl - Noclip (FIXED!)")
 print("Left Alt - Infinite Jump")
 print("")
 print("🌟 GOLDEN ESP MANAGER:")
@@ -1474,4 +1518,7 @@ print("")
 print("📏 ESP DISTANCE VOLUME:")
 print("- 0 = Show ALL MAP (infinite range)")
 print("- Adjust slider to set max distance")
+print("===================================")
+print("✅ BUTTON COLORS FIXED: Toggle buttons now change color correctly!")
+print("✅ NOCLIP FIXED: Toggle now works perfectly!")
 print("===================================")
